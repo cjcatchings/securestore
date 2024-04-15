@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: securestorefe
+  name: securestorefe
+  namespace: securestore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: securestorefe
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: securestorefe
+    spec:
+      containers:
+      - image: ccatchings/securestorefe:v0.1.local
+        name: securestorefe
+        ports:
+        - containerPort: 3000
+        env:
+        - name: AUTH_URL
+          value: "https://securestorekc.securestore.svc.cluster.local:$(SECURESTOREKC_SERVICE_PORT_KC_HTTPS)/realms/securestore/protocol/openid-connect/token"
+        - name: AUTH_CLIENT_ID
+          value: {{ .Values.keycloak.kcSecureStoreClientId  }}
+        - name: AUTH_CLIENT_SECRET
+          value: {{ .Values.keycloak.kcSecureStoreClientSecret | quote  }}
+        - name: AUTH_REDIRECT_URI
+          value: http://localhost:3000/home
+        - name: BACKEND_URL
+          value: "http://securestorebe.securestore.svc.cluster.local:$(SECURESTOREBE_SERVICE_PORT_SECSTOREBE)"
+        resources: {}
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: securestore
+  creationTimestamp: null
+  labels:
+    app: securestorefe
+  name: securestorefe
+spec:
+  ports:
+  - name: {{ .Values.ssfrontend.fePortName }}
+    port: {{ .Values.ssfrontend.fePortNumber }}
+    protocol: TCP
+    targetPort: {{ .Values.ssfrontend.feTargetPortNumber }}
+  selector:
+    app: securestorefe
+  type: NodePort
+status:
+  loadBalancer: {}

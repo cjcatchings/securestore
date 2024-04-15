@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: securestore
+  labels:
+    name: securestore
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  namespace: securestore
+  name: securestorepg-dbdata
+spec:
+  storageClassName: "standard"
+  volumeMode: Filesystem
+  capacity:
+    storage: 30Gi
+  accessModes:
+  - ReadWriteMany
+  hostPath:
+    path: "/Users/ccatchings/Playgrounds/SQLPlayground/securestore/pg"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: securestorepg-dbdata-claim
+  namespace: securestore
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: standard
+  volumeName: securestorepg-dbdata
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: securestore
+data:
+  postgresql.conf: |
+    max_connections = 100
+    shared_buffers = 256MB
+    log_statement = 'all'
+    listen_addresses = '0.0.0.0'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: securestore
+  creationTimestamp: null
+  labels:
+    app: securestorepg
+  name: securestorepg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: securestorepg
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: securestorepg
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      initContainers:
+      - image: busybox
+        name: vol-mount-hack
+        command: ['sh', '-c', 'chown -R 1000:1000 /var/lib/postgresql/data']
+        volumeMounts:
+        - name: local-pgdata-vol
+          mountPath: /var/lib/postgresql/data
+      containers:
+      - image: postgres
+        name: postgres
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        #command: ['postgres', '-c', 'config_file=/var/lib/postgresql/data/postgresql.conf', 'postgres']
+        volumeMounts:
+          - name: local-pgdata-vol
+            mountPath: /var/lib/postgresql/data
+          - name: local-pgconf-vol
+            mountPath: /etc/postgresql.conf
+        resources: {}
+        env:
+        - name: POSTGRES_PASSWORD
+          value: {{ .Values.postgres.dbpassword }}
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.dbuser }}
+      volumes:
+      - name: local-pgdata-vol
+        persistentVolumeClaim:
+          claimName: securestorepg-dbdata-claim
+      - name: local-pgconf-vol
+        configMap:
+          name: postgres-config
+          items:
+          - key: postgresql.conf
+            path: postgresql.conf
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: securestore
+  creationTimestamp: null
+  labels:
+    app: securestorepg
+  name: securestorepg
+spec:
+  ports:
+  - name: {{ .Values.postgres.portName }}
+    port: {{ .Values.postgres.portNumber }}
+    protocol: TCP
+    targetPort: {{ .Values.postgres.targetPortNumber }}
+  selector:
+    app: securestorepg
+  type: NodePort
+status:
+  loadBalancer: {}

@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: securestore
+  creationTimestamp: null
+  labels:
+    app: securestorekc
+  name: securestorekc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: securestorekc
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: securestorekc
+    spec:
+      initContainers:
+      - name: check-db-ready
+        image: postgres
+        command: ['sh', '-c', 'until pg_isready -h $PG_HOST -p 5432; do echo waiting for db; sleep 2; done;']
+        env:
+        - name: PG_HOST
+          value: "$(SECURESTOREPG_SERVICE_HOST)"
+      containers:
+      - image: ccatchings/secstore_kc:v0.2.local
+        name: securestorekc
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: kc-http
+        - containerPort: 8443
+          name: kc-https
+        resources: {}
+        env:
+        - name: KEYCLOAK_ADMIN
+          value: {{ .Values.keycloak.kcAdmin }}
+        - name: KEYCLOAK_ADMIN_PASSWORD
+          value: {{ .Values.keycloak.kcPassword | quote  }}
+        - name: KC_SEC_STORE_USER
+          value: {{ .Values.keycloak.kcSecureStoreUser }}
+        - name: KC_SEC_STORE_USER_PW
+          value: {{ .Values.keycloak.kcSecureStoreUserPassword | quote  }}
+        - name: KC_SEC_STORE_ADMIN
+          value: {{ .Values.keycloak.kcSecureStoreAdmin }}
+        - name: KC_SEC_STORE_ADMIN_PW
+          value: {{ .Values.keycloak.kcSecureStoreAdminPassword | quote  }}
+        - name: KC_SS_CLIENT_SECRET
+          value: {{ .Values.keycloak.kcSecureStoreClientSecret | quote  }}
+        - name: KC_DB_URL
+          value: "jdbc:postgresql://$(SECURESTOREPG_SERVICE_HOST):$(SECURESTOREPG_SERVICE_PORT)/secstore_kc"
+        - name: KC_DB_USERNAME
+          value: {{ .Values.keycloak.kcDatabaseUser }}
+        - name: KC_DB_PASSWORD
+          value: {{ .Values.keycloak.kcDatabasePassword | quote  }}
+        - name: KC_HOSTNAME
+          value: {{ .Values.keycloak.kcHostname }}
+        - name: KS_PW
+          value: {{ .Values.keycloak.kcKeystorePassword | quote }}
+        - name: KC_HOSTNAME_ADMIN_URL
+          value: {{ .Values.keycloak.kcHostAdminUrl }}
+        - name: KC_HOSTNAME_PORT
+          value: {{ .Values.keycloak.kcHostPort | quote }}
+        - name: KC_HOSTNAME_DEBUG
+          value: {{ .Values.keycloak.kcHostDebug | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: securestore
+  creationTimestamp: null
+  labels:
+    app: securestorekc
+  name: securestorekc
+spec:
+  ports:
+  - name: {{ .Values.keycloak.kcHttpPortName }}
+    port: {{ .Values.keycloak.kcHttpPortNumber }}
+    protocol: TCP
+    targetPort: {{ .Values.keycloak.kcHttpTargetPortNumber }}
+  - name: {{ .Values.keycloak.kcHttpsPortName }}
+    port: {{ .Values.keycloak.kcHttpsPortNumber }}
+    protocol: TCP
+    targetPort: {{ .Values.keycloak.kcHttpsTargetPortNumber }}
+    nodePort: {{ .Values.keycloak.kcHttpsNodePortNumber }}
+  selector:
+    app: securestorekc
+  type: NodePort
+status:
+  loadBalancer: {}

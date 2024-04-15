@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: securestore
+  creationTimestamp: null
+  labels:
+    app: securestorebe
+  name: securestorebe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: securestorebe
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: securestorebe
+    spec:
+      initContainers:
+      - name: check-db-ready
+        image: postgres
+        command: ['sh', '-c', 'until pg_isready -h $PG_HOST -p 5432; do echo waiting for db; sleep 2; done;']
+        env:
+        - name: PG_HOST
+          value: "$(SECURESTOREPG_SERVICE_HOST)"
+      containers:
+      - image: ccatchings/secstore_be:v0.2.local
+        name: securestorebe
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        resources: {}
+        env:
+        - name: KC_CONTAINER_URL
+          value: "https://securestorekc.securestore.svc.cluster.local:$(SECURESTOREKC_SERVICE_PORT_KC_HTTPS)"
+        - name: KC_AUTH_CLIENT_SECRET
+          value: {{ .Values.keycloak.kcSecureStoreClientSecret | quote }}
+        - name: PG_JDBC_URL
+          value: "jdbc:postgresql://$(SECURESTOREPG_SERVICE_HOST):$(SECURESTOREPG_SERVICE_PORT)/securestore"
+        - name: PG_JDBC_USER
+          value: {{ .Values.keycloak.kcDatabaseUser }}
+        - name: PG_JDBC_PASSWORD
+          value: {{ .Values.keycloak.kcDatabasePassword | quote }}
+        - name: KS_PW
+          value: {{ .Values.keycloak.kcKeystorePassword | quote }}
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: securestore
+  creationTimestamp: null
+  labels:
+    app: securestorebe
+  name: securestorebe
+spec:
+  ports:
+  - name: {{ .Values.ssbackend.bePortName }}
+    port: {{ .Values.ssbackend.bePortNumber }}
+    protocol: TCP
+    targetPort: {{ .Values.ssbackend.beTargetPortNumber }}
+  selector:
+    app: securestorebe
+  type: NodePort
+status:
+  loadBalancer: {}
