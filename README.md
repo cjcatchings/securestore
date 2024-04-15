@@ -1,1 +1,1 @@
-#cjc-securestore-helm-chart
+# cjc-securestore-helm-chart
